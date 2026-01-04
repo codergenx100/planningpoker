@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Global Planning Poker</title>
+    <title>Automated Planning Poker | Global Sync</title>
+    <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap" rel="stylesheet">
     <style>
         :root { 
@@ -14,54 +15,54 @@
         body { 
             background: var(--bg); color: var(--text-main); font-family: 'Plus Jakarta Sans', sans-serif; margin: 0; 
             background-image: radial-gradient(circle at 50% -20%, #1e293b 0%, #0b0f1a 80%);
-            min-height: 100vh; overflow-x: hidden;
+            min-height: 100vh; display: flex; flex-direction: column;
         }
+
         .global-nav {
             display: flex; justify-content: space-between; align-items: center;
             padding: 1rem 5%; background: rgba(11, 15, 26, 0.8);
             backdrop-filter: blur(12px); border-bottom: 1px solid var(--border);
         }
-        .rules-dropdown { position: relative; }
-        .rules-btn { background: var(--surface); color: var(--text-main); border: 1px solid var(--border); padding: 8px 16px; border-radius: 8px; cursor: pointer; }
+        
+        .rules-dropdown { position: relative; display: inline-block; }
+        .rules-btn { background: var(--surface); color: var(--text-main); border: 1px solid var(--border); padding: 8px 16px; border-radius: 8px; font-size: 0.8rem; font-weight: 600; cursor: pointer; }
         .rules-content {
             display: none; position: absolute; right: 0; top: 45px;
             background: var(--surface); min-width: 280px; border-radius: 12px;
             border: 1px solid var(--border); padding: 1.5rem; z-index: 1001;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
         }
         .rules-dropdown:hover .rules-content { display: block; }
 
-        /* SCREEN SYSTEM - FIXED BLANK ISSUE */
-        .screen { display: none; width: 100%; min-height: 80vh; align-items: center; justify-content: center; flex-direction: column; padding: 20px; box-sizing: border-box; }
-        .screen.active { display: flex !important; }
-
-        .modal { background: var(--surface); padding: 2.5rem; border-radius: 24px; width: 100%; max-width: 400px; border: 1px solid var(--border); text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.4); }
+        .screen { display: none; flex-direction: column; align-items: center; justify-content: center; padding: 20px; flex-grow: 1; }
+        .screen.active { display: flex; }
         
+        .modal { background: var(--surface); padding: 2.5rem; border-radius: 24px; width: 100%; max-width: 400px; border: 1px solid var(--border); text-align: center; }
         input, textarea { width: 100%; padding: 14px; margin: 10px 0; background: rgba(0,0,0,0.2); border: 1px solid var(--border); color: white; border-radius: 12px; font-size: 1rem; box-sizing: border-box; }
-        .btn { width: 100%; padding: 14px; border: none; border-radius: 12px; cursor: pointer; font-weight: 700; margin-top: 10px; }
+        
+        .btn { width: 100%; padding: 14px; border: none; border-radius: 12px; cursor: pointer; font-weight: 700; margin-top: 10px; transition: 0.3s; }
         .btn-primary { background: var(--accent); color: white; }
         .btn-success { background: var(--success); color: white; }
-        .btn-danger { background: #ef4444; color: white; }
 
-        #invite-banner { background: rgba(99, 102, 241, 0.15); border-bottom: 1px solid var(--accent); padding: 12px; text-align: center; display: none; }
-        .player-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 20px; padding: 20px 5%; max-width: 1000px; margin: 0 auto; }
-        .p-card { width: 80px; height: 110px; background: #1e293b; border: 2px solid var(--border); border-radius: 12px; margin: 0 auto 10px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 800; }
-        .p-card.voted { border-color: var(--success); box-shadow: 0 0 15px rgba(16, 185, 129, 0.3); }
-        .p-card.revealed { background: white !important; color: #0b0f1a !important; }
+        .player-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 25px; width: 100%; max-width: 900px; margin-top: 30px; }
+        .p-card { width: 80px; height: 115px; background: #1e293b; border: 2px solid var(--border); border-radius: 15px; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; font-weight: 800; transition: 0.3s; }
+        .p-card.voted { border-color: var(--success); box-shadow: 0 0 15px rgba(16, 185, 129, 0.3); color: var(--success); }
+        .p-card.revealed { background: white !important; color: #0b0f1a !important; transform: rotateY(360deg); }
 
-        .tray { background: rgba(11, 15, 26, 0.95); padding: 1.5rem; display: none; justify-content: center; gap: 8px; position: fixed; bottom: 0; width: 100%; border-top: 1px solid var(--border); flex-wrap: wrap; }
-        .v-card { width: 45px; height: 70px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-weight: 700; }
-        .v-card.selected { background: var(--accent); transform: translateY(-10px); }
+        .tray { background: rgba(11, 15, 26, 0.95); padding: 1.5rem; display: none; justify-content: center; gap: 10px; position: fixed; bottom: 0; width: 100%; border-top: 1px solid var(--border); }
+        .v-card { width: 50px; height: 75px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-weight: 700; transition: 0.2s; }
+        .v-card.selected { background: var(--accent); transform: translateY(-10px); box-shadow: 0 10px 20px rgba(99, 102, 241, 0.4); }
     </style>
 </head>
 <body>
 
     <nav class="global-nav">
-        <div class="nav-logo"><h1>Planning Poker</h1></div>
+        <div><h1 style="font-size:1.2rem; margin:0;">Global Planning Poker</h1></div>
         <div class="rules-dropdown">
             <button class="rules-btn">Rules & Guide ▾</button>
             <div class="rules-content">
                 <h4 style="color:var(--accent); margin-top:0;">Estimation Rules</h4>
-                <ul style="font-size:0.8rem; color:var(--text-muted); line-height:1.6; padding-left:20px;">
+                <ul style="font-size:0.8rem; color:var(--text-muted); line-height:1.6; padding-left:18px;">
                     <li><b>1-3:</b> Small tasks</li>
                     <li><b>5-13:</b> Medium tasks</li>
                     <li><b>21-89:</b> Large (Break down)</li>
@@ -71,205 +72,154 @@
         </div>
     </nav>
 
-    <div id="invite-banner">
-        <span>Global Join Link: </span>
-        <strong id="session-url" style="color:var(--accent); font-size:0.8rem;"></strong>
-        <button onclick="app.copyLink()" style="margin-left:10px; background:var(--accent); border:none; color:white; padding:4px 8px; border-radius:4px; cursor:pointer;">Copy</button>
-    </div>
-
-    <div id="scr-host-login" class="screen">
+    <div id="scr-login" class="screen active">
         <div class="modal">
-            <h2>Global Room Host</h2>
-            <p style="color:var(--text-muted); font-size:0.9rem;">Start a new public estimation session</p>
-            <input type="text" id="host-name-input" placeholder="Enter Host Name">
-            <button class="btn btn-primary" onclick="app.loginAsHost()">Create Room</button>
+            <h2 id="role-text">Global Room</h2>
+            <input type="text" id="user-name" placeholder="Enter Your Name">
+            <button class="btn btn-primary" onclick="app.login()">Join Session</button>
         </div>
     </div>
 
-    <div id="scr-dev-login" class="screen">
-        <div class="modal">
-            <h2 style="color:var(--success)">Join Room</h2>
-            <p style="color:var(--text-muted); font-size:0.9rem;">Team Member Login</p>
-            <input type="text" id="dev-name-input" placeholder="Enter Your Name">
-            <button class="btn btn-success" onclick="app.loginAsDev()">Join Table</button>
-        </div>
-    </div>
-
-    <div id="scr-controller" class="screen">
+    <div id="scr-dash" class="screen">
         <div class="modal">
             <h2>Room Controller</h2>
-            <input type="text" id="jira-id" placeholder="Ticket ID (e.g., DEV-101)">
-            <textarea id="jira-desc" rows="3" placeholder="Description/Summary..."></textarea>
-            <button class="btn btn-primary" onclick="app.pushTicket()">Push to Board</button>
-            <button id="csv-btn" class="btn btn-success" style="display:none;" onclick="app.downloadCSV()">Download Report</button>
-            <button class="btn btn-danger" onclick="app.resetSession()">End & Clear Session</button>
+            <input type="text" id="t-id" placeholder="Ticket ID (e.g. JIRA-101)">
+            <textarea id="t-desc" rows="3" placeholder="Work Summary..."></textarea>
+            <button class="btn btn-primary" onclick="app.broadcastTicket()">Push to Team</button>
         </div>
     </div>
 
-    <div id="scr-main-board" class="screen" style="justify-content: flex-start; padding-top:40px;">
-        <div style="text-align:center; max-width: 600px; margin-bottom: 30px;">
-            <span id="board-id" style="color:var(--accent); font-weight:800; text-transform:uppercase;"></span>
-            <h2 id="board-desc" style="margin-top:5px;"></h2>
-        </div>
-
-        <div id="host-actions" style="display:none; margin-bottom: 20px;">
-            <button id="reveal-btn" class="btn btn-primary" style="width:200px" onclick="app.revealVotes()">Reveal Cards</button>
-            <div id="final-box" style="display:none; margin-top:15px; gap:10px; justify-content:center;">
-                <input type="text" id="final-score" placeholder="Points" style="width:80px; margin:0; text-align:center;">
-                <button class="btn btn-success" style="width:auto; margin:0; padding:0 20px;" onclick="app.saveAndClose()">Save Ticket</button>
+    <div id="scr-board" class="screen" style="justify-content: flex-start; padding-top:50px;">
+        <div style="text-align:center; margin-bottom: 40px;">
+            <span id="display-id" style="color:var(--accent); font-weight:800; text-transform:uppercase; letter-spacing:1px;"></span>
+            <h1 id="display-desc" style="margin: 10px 0;"></h1>
+            <div id="host-controls" style="display:none; margin-top:20px;">
+                <button class="btn btn-primary" style="width:200px" onclick="app.broadcastReveal()">Reveal All Cards</button>
             </div>
         </div>
 
-        <div class="player-grid" id="player-grid"></div>
+        <div id="player-grid" class="player-grid"></div>
 
         <div class="tray" id="dev-tray">
-            <div class="v-card" onclick="app.castVote(this)">1</div>
-            <div class="v-card" onclick="app.castVote(this)">2</div>
-            <div class="v-card" onclick="app.castVote(this)">3</div>
-            <div class="v-card" onclick="app.castVote(this)">5</div>
-            <div class="v-card" onclick="app.castVote(this)">8</div>
-            <div class="v-card" onclick="app.castVote(this)">13</div>
-            <div class="v-card" onclick="app.castVote(this)">21</div>
-            <div class="v-card" onclick="app.castVote(this)">?</div>
+            <div class="v-card" onclick="app.sendVote('1', this)">1</div>
+            <div class="v-card" onclick="app.sendVote('2', this)">2</div>
+            <div class="v-card" onclick="app.sendVote('3', this)">3</div>
+            <div class="v-card" onclick="app.sendVote('5', this)">5</div>
+            <div class="v-card" onclick="app.sendVote('8', this)">8</div>
+            <div class="v-card" onclick="app.sendVote('13', this)">13</div>
+            <div class="v-card" onclick="app.sendVote('21', this)">21</div>
+            <div class="v-card" onclick="app.sendVote('?', this)">?</div>
         </div>
     </div>
 
     <script>
+        // API KEY INTEGRATED
+        const ABLY_KEY = 'PBosKA.I2icuQ:EkOORiNJkBvQCmLexgwG9F7sjBdDxmW9uITNXdtTJSA';
+        const ably = new Ably.Realtime(ABLY_KEY);
+        const channel = ably.channels.get('global-poker-sync');
+
         const app = {
             role: 'host',
-            userName: '',
-            history: JSON.parse(sessionStorage.getItem('poker_data')) || [],
+            name: '',
+            players: {}, // Stores { name: { value: '5', done: true } }
 
             init: function() {
-                const urlParams = new URLSearchParams(window.location.search);
-                // Hide all screens initially
-                document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-
-                if (urlParams.get('view') === 'dev') {
+                const params = new URLSearchParams(window.location.search);
+                if (params.get('view') === 'dev') {
                     this.role = 'dev';
-                    document.getElementById('scr-dev-login').classList.add('active');
+                    document.getElementById('role-text').innerText = "Join as Developer";
+                }
+                
+                // Subscribe to real-time events
+                channel.subscribe('poker-event', (msg) => {
+                    this.handleIncomingAction(msg.data);
+                });
+            },
+
+            login: function() {
+                this.name = document.getElementById('user-name').value;
+                if (!this.name) return alert("Enter your name");
+
+                document.getElementById('scr-login').classList.remove('active');
+                if (this.role === 'host') {
+                    document.getElementById('scr-dash').classList.add('active');
                 } else {
-                    this.role = 'host';
-                    document.getElementById('scr-host-login').classList.add('active');
+                    document.getElementById('scr-board').classList.add('active');
+                    document.getElementById('display-desc').innerText = "Waiting for host to start...";
                 }
             },
 
-            showScreen: function(id) {
+            // --- HOST ACTIONS ---
+            broadcastTicket: function() {
+                const id = document.getElementById('t-id').value;
+                const desc = document.getElementById('t-desc').value;
+                if (!id) return alert("Enter Ticket ID");
+
+                channel.publish('poker-event', {
+                    type: 'new-ticket',
+                    id: id,
+                    desc: desc
+                });
+            },
+
+            broadcastReveal: function() {
+                channel.publish('poker-event', { type: 'reveal-all' });
+            },
+
+            // --- DEVELOPER ACTIONS ---
+            sendVote: function(val, el) {
+                document.querySelectorAll('.v-card').forEach(c => c.classList.remove('selected'));
+                el.classList.add('selected');
+
+                channel.publish('poker-event', {
+                    type: 'vote-cast',
+                    user: this.name,
+                    value: val
+                });
+            },
+
+            // --- CORE SYNC LOGIC ---
+            handleIncomingAction: function(data) {
+                if (data.type === 'new-ticket') {
+                    this.players = {}; // Reset board
+                    this.showMainBoard(data.id, data.desc);
+                }
+
+                if (data.type === 'vote-cast') {
+                    this.players[data.user] = { value: data.value, done: true };
+                    this.renderGrid(false);
+                }
+
+                if (data.type === 'reveal-all') {
+                    this.renderGrid(true);
+                }
+            },
+
+            showMainBoard: function(id, desc) {
                 document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-                document.getElementById(id).classList.add('active');
-            },
-
-            loginAsHost: function() {
-                this.userName = document.getElementById('host-name-input').value;
-                if (!this.userName) return alert("Please enter a name");
-                
-                const joinLink = window.location.origin + window.location.pathname + "?view=dev";
-                document.getElementById('session-url').innerText = joinLink;
-                document.getElementById('invite-banner').style.display = "block";
-                this.showScreen('scr-controller');
-            },
-
-            loginAsDev: function() {
-                this.userName = document.getElementById('dev-name-input').value;
-                if (!this.userName) return alert("Please enter a name");
-                this.updateBoard("READY", "Waiting for host to start...");
-                this.showScreen('scr-main-board');
-            },
-
-            pushTicket: function() {
-                const id = document.getElementById('jira-id').value;
-                const desc = document.getElementById('jira-desc').value;
-                if (!id) return alert("JIRA ID required");
-                this.updateBoard(id, desc);
-                this.showScreen('scr-main-board');
-            },
-
-            updateBoard: function(id, desc) {
-                document.getElementById('board-id').innerText = id;
-                document.getElementById('board-desc').innerText = desc;
+                document.getElementById('scr-board').classList.add('active');
+                document.getElementById('display-id').innerText = id;
+                document.getElementById('display-desc').innerText = desc;
                 
                 if (this.role === 'host') {
-                    document.getElementById('host-actions').style.display = "block";
-                    document.getElementById('reveal-btn').style.display = "inline-block";
-                    document.getElementById('final-box').style.display = "none";
+                    document.getElementById('host-controls').style.display = 'block';
                 } else {
-                    document.getElementById('dev-tray').style.display = "flex";
+                    document.getElementById('dev-tray').style.display = 'flex';
                 }
-                this.renderPlayers();
+                this.renderGrid(false);
             },
 
-            renderPlayers: function() {
+            renderGrid: function(revealed) {
                 const grid = document.getElementById('player-grid');
-                grid.innerHTML = "";
-                const mockPlayers = (this.role === 'dev') ? [this.userName, "Alice", "Bob"] : ["Developer 1", "Developer 2", "Developer 3"];
-                mockPlayers.forEach((p, i) => {
+                grid.innerHTML = '';
+                
+                for (let user in this.players) {
+                    const p = this.players[user];
+                    const cardClass = p.done ? 'voted' : '';
+                    const revealClass = revealed ? 'revealed' : '';
+                    const displayValue = revealed ? p.value : (p.done ? '✓' : '?');
+
                     grid.innerHTML += `
                         <div style="text-align:center">
-                            <div class="p-card" id="card-${i}">?</div>
-                            <span style="font-size:0.8rem; opacity:0.7">${p}</span>
-                        </div>`;
-                });
-            },
-
-            castVote: function(el) {
-                document.querySelectorAll('.v-card').forEach(v => v.classList.remove('selected'));
-                el.classList.add('selected');
-                const myCard = document.getElementById('card-0');
-                myCard.innerText = el.innerText;
-                myCard.classList.add('voted');
-            },
-
-            revealVotes: function() {
-                document.querySelectorAll('.p-card').forEach(c => {
-                    c.classList.add('revealed');
-                    if (c.innerText === '?') c.innerText = "5";
-                });
-                document.getElementById('reveal-btn').style.display = "none";
-                document.getElementById('final-box').style.display = "flex";
-            },
-
-            saveAndClose: function() {
-                const pts = document.getElementById('final-score').value;
-                if (!pts) return alert("Enter team score");
-                
-                this.history.push({
-                    id: document.getElementById('board-id').innerText,
-                    summary: document.getElementById('board-desc').innerText,
-                    pts: pts
-                });
-                sessionStorage.setItem('poker_data', JSON.stringify(this.history));
-                
-                document.getElementById('jira-id').value = "";
-                document.getElementById('jira-desc').value = "";
-                document.getElementById('final-score').value = "";
-                document.getElementById('csv-btn').style.display = "block";
-                this.showScreen('scr-controller');
-            },
-
-            copyLink: function() {
-                navigator.clipboard.writeText(document.getElementById('session-url').innerText);
-                alert("Link Copied!");
-            },
-
-            downloadCSV: function() {
-                let csv = "ID,Summary,Points\n";
-                this.history.forEach(row => csv += `${row.id},"${row.summary}",${row.pts}\n`);
-                const blob = new Blob([csv], {type: 'text/csv'});
-                const a = document.createElement('a');
-                a.href = URL.createObjectURL(blob);
-                a.download = "Estimation_Report.csv";
-                a.click();
-            },
-
-            resetSession: function() {
-                if (confirm("Clear all data and reset room?")) {
-                    sessionStorage.clear();
-                    window.location.href = window.location.origin + window.location.pathname;
-                }
-            }
-        };
-
-        window.onload = () => app.init();
-    </script>
-</body>
-</html>
+                            <div class="p-card ${cardClass} ${revealClass}">${displayValue}</div>
+                            <span style="font-size:0.8rem; font-weight
