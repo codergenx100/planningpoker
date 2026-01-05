@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Global Planning Poker</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.ably.com/lib/ably.min-1.js"></script>
     <style>
         :root { 
             --bg: #0b0f1a; --surface: #161b2c; --accent: #6366f1; 
@@ -30,7 +31,6 @@
         }
         .rules-dropdown:hover .rules-content { display: block; }
 
-        /* SCREEN SYSTEM - FIXED BLANK ISSUE */
         .screen { display: none; width: 100%; min-height: 80vh; align-items: center; justify-content: center; flex-direction: column; padding: 20px; box-sizing: border-box; }
         .screen.active { display: flex !important; }
 
@@ -44,11 +44,11 @@
 
         #invite-banner { background: rgba(99, 102, 241, 0.15); border-bottom: 1px solid var(--accent); padding: 12px; text-align: center; display: none; }
         .player-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 20px; padding: 20px 5%; max-width: 1000px; margin: 0 auto; }
-        .p-card { width: 80px; height: 110px; background: #1e293b; border: 2px solid var(--border); border-radius: 12px; margin: 0 auto 10px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 800; }
-        .p-card.voted { border-color: var(--success); box-shadow: 0 0 15px rgba(16, 185, 129, 0.3); }
-        .p-card.revealed { background: white !important; color: #0b0f1a !important; }
+        .p-card { width: 80px; height: 110px; background: #1e293b; border: 2px solid var(--border); border-radius: 12px; margin: 0 auto 10px; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 800; transition: all 0.3s ease; }
+        .p-card.voted { border-color: var(--success); box-shadow: 0 0 15px rgba(16, 185, 129, 0.3); color: var(--success); }
+        .p-card.revealed { background: white !important; color: #0b0f1a !important; transform: rotateY(360deg); }
 
-        .tray { background: rgba(11, 15, 26, 0.95); padding: 1.5rem; display: none; justify-content: center; gap: 8px; position: fixed; bottom: 0; width: 100%; border-top: 1px solid var(--border); flex-wrap: wrap; }
+        .tray { background: rgba(11, 15, 26, 0.95); padding: 1.5rem; display: none; justify-content: center; gap: 8px; position: fixed; bottom: 0; width: 100%; border-top: 1px solid var(--border); flex-wrap: wrap; z-index: 1000; }
         .v-card { width: 45px; height: 70px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-weight: 700; }
         .v-card.selected { background: var(--accent); transform: translateY(-10px); }
     </style>
@@ -72,24 +72,22 @@
     </nav>
 
     <div id="invite-banner">
-        <span>Global Join Link: </span>
+        <span>Share this link with your team: </span>
         <strong id="session-url" style="color:var(--accent); font-size:0.8rem;"></strong>
         <button onclick="app.copyLink()" style="margin-left:10px; background:var(--accent); border:none; color:white; padding:4px 8px; border-radius:4px; cursor:pointer;">Copy</button>
     </div>
 
     <div id="scr-host-login" class="screen">
         <div class="modal">
-            <h2>Global Room Host</h2>
-            <p style="color:var(--text-muted); font-size:0.9rem;">Start a new public estimation session</p>
-            <input type="text" id="host-name-input" placeholder="Enter Host Name">
-            <button class="btn btn-primary" onclick="app.loginAsHost()">Create Room</button>
+            <h2>Start Session</h2>
+            <input type="text" id="host-name-input" placeholder="Your Name (Host)">
+            <button class="btn btn-primary" onclick="app.loginAsHost()">Create Private Room</button>
         </div>
     </div>
 
     <div id="scr-dev-login" class="screen">
         <div class="modal">
             <h2 style="color:var(--success)">Join Room</h2>
-            <p style="color:var(--text-muted); font-size:0.9rem;">Team Member Login</p>
             <input type="text" id="dev-name-input" placeholder="Enter Your Name">
             <button class="btn btn-success" onclick="app.loginAsDev()">Join Table</button>
         </div>
@@ -99,10 +97,10 @@
         <div class="modal">
             <h2>Room Controller</h2>
             <input type="text" id="jira-id" placeholder="Ticket ID (e.g., DEV-101)">
-            <textarea id="jira-desc" rows="3" placeholder="Description/Summary..."></textarea>
-            <button class="btn btn-primary" onclick="app.pushTicket()">Push to Board</button>
+            <textarea id="jira-desc" rows="3" placeholder="Description..."></textarea>
+            <button class="btn btn-primary" onclick="app.pushTicket()">Push to All Players</button>
             <button id="csv-btn" class="btn btn-success" style="display:none;" onclick="app.downloadCSV()">Download Report</button>
-            <button class="btn btn-danger" onclick="app.resetSession()">End & Clear Session</button>
+            <button class="btn btn-danger" onclick="app.resetSession()">End Session</button>
         </div>
     </div>
 
@@ -113,10 +111,10 @@
         </div>
 
         <div id="host-actions" style="display:none; margin-bottom: 20px;">
-            <button id="reveal-btn" class="btn btn-primary" style="width:200px" onclick="app.revealVotes()">Reveal Cards</button>
+            <button id="reveal-btn" class="btn btn-primary" style="width:200px" onclick="app.revealVotes()">Reveal All Cards</button>
             <div id="final-box" style="display:none; margin-top:15px; gap:10px; justify-content:center;">
                 <input type="text" id="final-score" placeholder="Points" style="width:80px; margin:0; text-align:center;">
-                <button class="btn btn-success" style="width:auto; margin:0; padding:0 20px;" onclick="app.saveAndClose()">Save Ticket</button>
+                <button class="btn btn-success" style="width:auto; margin:0; padding:0 20px;" onclick="app.saveAndClose()">Save & Next</button>
             </div>
         </div>
 
@@ -135,35 +133,55 @@
     </div>
 
     <script>
+        const ABLY_KEY = 'PBosKA.I2icuQ:EkOORiNJkBvQCmLexgwG9F7sjBdDxmW9uITNXdtTJSA';
+        const ably = new Ably.Realtime(ABLY_KEY);
+        let channel;
+
         const app = {
             role: 'host',
             userName: '',
-            history: JSON.parse(sessionStorage.getItem('poker_data')) || [],
+            roomId: '',
+            history: JSON.parse(localStorage.getItem('poker_data')) || [],
 
             init: function() {
                 const urlParams = new URLSearchParams(window.location.search);
-                // Hide all screens initially
-                document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+                this.roomId = urlParams.get('room');
 
-                if (urlParams.get('view') === 'dev') {
+                if (urlParams.get('view') === 'dev' && this.roomId) {
                     this.role = 'dev';
-                    document.getElementById('scr-dev-login').classList.add('active');
+                    this.connectToRoom(this.roomId);
+                    this.showScreen('scr-dev-login');
                 } else {
                     this.role = 'host';
-                    document.getElementById('scr-host-login').classList.add('active');
+                    this.showScreen('scr-host-login');
                 }
             },
 
-            showScreen: function(id) {
-                document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-                document.getElementById(id).classList.add('active');
+            connectToRoom: function(id) {
+                channel = ably.channels.get('room-' + id);
+                channel.subscribe('update', (msg) => {
+                    this.handleSignal(msg.data);
+                });
+            },
+
+            handleSignal: function(data) {
+                if (data.type === 'TICKET_PUSH') {
+                    this.updateBoardUI(data.id, data.desc);
+                } else if (data.type === 'VOTE_CAST') {
+                    this.renderPlayerVote(data.user, data.value);
+                } else if (data.type === 'REVEAL_ALL') {
+                    this.revealUI();
+                } else if (data.type === 'RESET') {
+                    location.reload();
+                }
             },
 
             loginAsHost: function() {
-                this.userName = document.getElementById('host-name-input').value;
-                if (!this.userName) return alert("Please enter a name");
+                this.userName = document.getElementById('host-name-input').value || 'Host';
+                this.roomId = Math.random().toString(36).substring(2, 8).toUpperCase();
+                this.connectToRoom(this.roomId);
                 
-                const joinLink = window.location.origin + window.location.pathname + "?view=dev";
+                const joinLink = `${window.location.origin}${window.location.pathname}?view=dev&room=${this.roomId}`;
                 document.getElementById('session-url').innerText = joinLink;
                 document.getElementById('invite-banner').style.display = "block";
                 this.showScreen('scr-controller');
@@ -171,77 +189,79 @@
 
             loginAsDev: function() {
                 this.userName = document.getElementById('dev-name-input').value;
-                if (!this.userName) return alert("Please enter a name");
-                this.updateBoard("READY", "Waiting for host to start...");
-                this.showScreen('scr-main-board');
+                if (!this.userName) return alert("Enter name");
+                this.updateBoardUI("CONNECTED", "Waiting for host to push a ticket...");
             },
 
             pushTicket: function() {
                 const id = document.getElementById('jira-id').value;
                 const desc = document.getElementById('jira-desc').value;
-                if (!id) return alert("JIRA ID required");
-                this.updateBoard(id, desc);
+                if (!id) return alert("Ticket ID needed");
+                
+                channel.publish('update', { type: 'TICKET_PUSH', id, desc });
                 this.showScreen('scr-main-board');
             },
 
-            updateBoard: function(id, desc) {
+            castVote: function(el) {
+                const val = el.innerText;
+                document.querySelectorAll('.v-card').forEach(v => v.classList.remove('selected'));
+                el.classList.add('selected');
+                channel.publish('update', { type: 'VOTE_CAST', user: this.userName, value: val });
+            },
+
+            renderPlayerVote: function(user, value) {
+                const grid = document.getElementById('player-grid');
+                let pDiv = document.getElementById(`p-${user}`);
+                if (!pDiv) {
+                    const newPlayer = document.createElement('div');
+                    newPlayer.id = `p-${user}`;
+                    newPlayer.style.textAlign = 'center';
+                    newPlayer.innerHTML = `
+                        <div class="p-card voted" data-val="${value}">✓</div>
+                        <span style="font-size:0.8rem; opacity:0.7">${user}</span>
+                    `;
+                    grid.appendChild(newPlayer);
+                } else {
+                    const card = pDiv.querySelector('.p-card');
+                    card.setAttribute('data-val', value);
+                    card.classList.add('voted');
+                    card.innerText = '✓';
+                }
+            },
+
+            revealVotes: function() {
+                channel.publish('update', { type: 'REVEAL_ALL' });
+            },
+
+            revealUI: function() {
+                document.querySelectorAll('.p-card').forEach(c => {
+                    c.innerText = c.getAttribute('data-val') || '?';
+                    c.classList.add('revealed');
+                });
+                if (this.role === 'host') {
+                    document.getElementById('reveal-btn').style.display = "none";
+                    document.getElementById('final-box').style.display = "flex";
+                }
+            },
+
+            updateBoardUI: function(id, desc) {
                 document.getElementById('board-id').innerText = id;
                 document.getElementById('board-desc').innerText = desc;
-                
+                document.getElementById('player-grid').innerHTML = ""; 
+                if (this.role === 'dev') document.getElementById('dev-tray').style.display = "flex";
                 if (this.role === 'host') {
                     document.getElementById('host-actions').style.display = "block";
                     document.getElementById('reveal-btn').style.display = "inline-block";
                     document.getElementById('final-box').style.display = "none";
-                } else {
-                    document.getElementById('dev-tray').style.display = "flex";
                 }
-                this.renderPlayers();
-            },
-
-            renderPlayers: function() {
-                const grid = document.getElementById('player-grid');
-                grid.innerHTML = "";
-                const mockPlayers = (this.role === 'dev') ? [this.userName, "Alice", "Bob"] : ["Developer 1", "Developer 2", "Developer 3"];
-                mockPlayers.forEach((p, i) => {
-                    grid.innerHTML += `
-                        <div style="text-align:center">
-                            <div class="p-card" id="card-${i}">?</div>
-                            <span style="font-size:0.8rem; opacity:0.7">${p}</span>
-                        </div>`;
-                });
-            },
-
-            castVote: function(el) {
-                document.querySelectorAll('.v-card').forEach(v => v.classList.remove('selected'));
-                el.classList.add('selected');
-                const myCard = document.getElementById('card-0');
-                myCard.innerText = el.innerText;
-                myCard.classList.add('voted');
-            },
-
-            revealVotes: function() {
-                document.querySelectorAll('.p-card').forEach(c => {
-                    c.classList.add('revealed');
-                    if (c.innerText === '?') c.innerText = "5";
-                });
-                document.getElementById('reveal-btn').style.display = "none";
-                document.getElementById('final-box').style.display = "flex";
+                this.showScreen('scr-main-board');
             },
 
             saveAndClose: function() {
                 const pts = document.getElementById('final-score').value;
-                if (!pts) return alert("Enter team score");
-                
-                this.history.push({
-                    id: document.getElementById('board-id').innerText,
-                    summary: document.getElementById('board-desc').innerText,
-                    pts: pts
-                });
-                sessionStorage.setItem('poker_data', JSON.stringify(this.history));
-                
-                document.getElementById('jira-id').value = "";
-                document.getElementById('jira-desc').value = "";
-                document.getElementById('final-score').value = "";
+                if (!pts) return alert("Enter points");
+                this.history.push({ id: document.getElementById('board-id').innerText, summary: document.getElementById('board-desc').innerText, pts });
+                localStorage.setItem('poker_data', JSON.stringify(this.history));
                 document.getElementById('csv-btn').style.display = "block";
                 this.showScreen('scr-controller');
             },
@@ -257,15 +277,19 @@
                 const blob = new Blob([csv], {type: 'text/csv'});
                 const a = document.createElement('a');
                 a.href = URL.createObjectURL(blob);
-                a.download = "Estimation_Report.csv";
+                a.download = "Sprint_Estimation.csv";
                 a.click();
             },
 
             resetSession: function() {
-                if (confirm("Clear all data and reset room?")) {
-                    sessionStorage.clear();
-                    window.location.href = window.location.origin + window.location.pathname;
+                if (confirm("Reset everything?")) {
+                    channel.publish('update', { type: 'RESET' });
                 }
+            },
+
+            showScreen: function(id) {
+                document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+                document.getElementById(id).classList.add('active');
             }
         };
 
